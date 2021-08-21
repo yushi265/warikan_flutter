@@ -23,7 +23,6 @@ class MyApp extends StatelessWidget {
       ),
       routes: <String, WidgetBuilder>{
         '/event-list': (BuildContext context) => new EventList(),
-        '/add-payment': (BuildContext context) => new AddPayment(),
       },
     );
   }

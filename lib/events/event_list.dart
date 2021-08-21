@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:convert' as convert;
 import 'package:http/http.dart' as http;
+import 'package:warikan/events/event_detail.dart';
 import '../payments/payment_list.dart';
 import '../../models.dart';
 import '../../constants.dart' as Constants;
@@ -44,17 +45,22 @@ class _EventListState extends State<EventList> {
         itemBuilder: (context, index) {
           return Card(
             child: ListTile(
-              title: Text(_eventList[index].title),
-              subtitle: Text(_eventList[index].createdAt),
-              onTap: () => {
-                Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => PaymentList(_eventList[index].id)),
-                )
-              },
-              onLongPress: () => {},
-              trailing: Icon(Icons.more_vert),
-              dense: true,
+                title: Text(_eventList[index].title,
+                  style: TextStyle(
+                  fontSize: 16,
+                ),),
+                subtitle: Text(_eventList[index].createdAt),
+                onTap: () => {
+                  Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => EventDetail(_eventList[index])),
+                  )
+                },
+                onLongPress: () => {
+                  _openAddEventModal(_eventList[index])
+                },
+                trailing: Icon(Icons.more_vert),
+                dense: true,
           ));
         },
       ),
@@ -81,16 +87,27 @@ class _EventListState extends State<EventList> {
           _eventList.add(Event(e['id'], e['title'], e['created_at']));
         });
       });
-    } else {
-      print('Request failed with status: ${response.statusCode}.');
+    } else if (response.statusCode == 422) {
+      final snackBar = SnackBar(
+        content: Text('エラーが発生しました'),
+        action: SnackBarAction(
+          label: 'OK',
+          onPressed: () {
+            // Some code to undo the change.
+          },
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
     }
   }
 
   // イベントを追加する
-  Future storeEvent(String title) async {
-    var url = Uri.http(Constants.HOST, '/api/events/store', {
-      'title': title
-    });
+  Future storeEvent(String? title, [Event? event]) async {
+    var url = Uri.http(Constants.HOST,
+        event != null
+            ? '/api/events/' + event.id.toString() + '/update'
+            : '/api/events/store'
+    );
 
     String body = convert.jsonEncode({'title': title});
 
@@ -103,14 +120,49 @@ class _EventListState extends State<EventList> {
           _eventList.add(Event(e['id'], e['title'], e['created_at']));
         });
       });
-    } else {
-      print('Request failed with status: ${response.statusCode}.');
+    } else if (response.statusCode == 422) {
+      final snackBar = SnackBar(
+        content: Text('エラーが発生しました'),
+        action: SnackBarAction(
+          label: 'OK',
+          onPressed: () {
+            // Some code to undo the change.
+          },
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
     }
   }
 
-  //  イベント追加モーダル
-  void _openAddEventModal() {
-    String _title = '';
+  // イベントを削除する
+  Future destroyEvent(Event event) async {
+    var url = Uri.http(Constants.HOST, '/api/events/' + event.id.toString() + '/destroy');
+
+    var response = await http.post(url, headers: Constants.HEADERS);
+    if (response.statusCode == 200) {
+      var jsonResponse = convert.jsonDecode(response.body);
+      setState(() {
+        _eventList = [];
+        jsonResponse.forEach((e) {
+          _eventList.add(Event(e['id'], e['title'], e['created_at']));
+        });
+      });
+    } else if (response.statusCode == 422) {
+      var jsonResponse = convert.jsonDecode(response.body);
+      final snackBar = SnackBar(
+        content: Text(jsonResponse.errors),
+        action: SnackBarAction(
+          label: 'OK',
+          onPressed: () {
+            // Some code to undo the change.
+          },
+        ),
+      );
+  }}
+
+  //  支払い編集モーダル
+  void _openAddEventModal([Event? event]) {
+    String? _title = event?.title;
 
     showModalBottomSheet(
       backgroundColor: Colors.transparent,
@@ -118,8 +170,8 @@ class _EventListState extends State<EventList> {
       context: context,
       builder: (BuildContext context) {
         return Container(
-          margin: EdgeInsets.only(top: 64),
-          padding: EdgeInsets.all(64),
+          margin: EdgeInsets.only(top: 200),
+          padding: EdgeInsets.all(30),
           decoration: BoxDecoration(
             //モーダル自体の色
             color: Colors.white,
@@ -130,13 +182,14 @@ class _EventListState extends State<EventList> {
             ),
           ),
           child: Container(
-            margin: EdgeInsets.only(top: 64),
             padding: EdgeInsets.all(10),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Padding(padding: const EdgeInsets.symmetric(vertical: 30),
-                  child: Text('イベントを追加する', style: TextStyle(
+                  child: Text(event != null
+                      ? 'イベント名を編集する'
+                      : 'イベントを追加する',
+                    style: TextStyle(
                     fontSize: 20,
                   ),
                 ),
@@ -145,6 +198,10 @@ class _EventListState extends State<EventList> {
                   child: Column(
                     children: [
                       TextField(
+                        style: new TextStyle(
+                          fontSize: 20.0,
+                        ),
+                        controller: TextEditingController(text: event?.title),
                         decoration: InputDecoration(
                             labelText: "タイトル",
                         ),
@@ -164,8 +221,13 @@ class _EventListState extends State<EventList> {
                     width: double.infinity,
                     child: ElevatedButton(
                       child: Text(
-                        '追加',
-                        style: TextStyle(color: Colors.white),
+                        event != null
+                        ? '変更'
+                        : '追加',
+                        style: TextStyle(
+                          fontSize: 20,
+                          color: Colors.white,
+                        ),
                       ),
                       style: ElevatedButton.styleFrom(
                         primary: Colors.blue,
@@ -173,9 +235,38 @@ class _EventListState extends State<EventList> {
                         elevation: 16,
                       ),
                       onPressed: () {
-                        storeEvent(_title);
-                        getEvents();
-                        Navigator.pop(context);
+                        if (event != null) {
+                          storeEvent(_title, event);
+                          Navigator.pop(context);
+                        } else {
+                          storeEvent(_title);
+                          Navigator.pop(context);
+                        }
+                      },
+                    ),
+                  ),
+                ),
+                if (event != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10.0),
+                  child: Container(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      child: Text(
+                        '削除',
+                        style: TextStyle(
+                          fontSize: 20,
+                          color: Colors.white,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        primary: Colors.redAccent,
+                        onPrimary: Colors.black,
+                        elevation: 16,
+                      ),
+                      onPressed: () {
+                          destroyEvent(event);
+                          Navigator.pop(context);
                       },
                     ),
                   ),

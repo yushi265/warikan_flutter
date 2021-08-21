@@ -1,34 +1,33 @@
 import 'package:flutter/material.dart';
+import 'dart:convert' as convert;
+import 'package:http/http.dart' as http;
+import '../../models.dart';
+import '../../constants.dart' as Constants;
 
 class AddPayment extends StatefulWidget {
-  AddPayment({Key? key}) : super(key: key);
+  AddPayment(this._event);
+  final Event _event;
 
   @override
-  _AddPaymentState createState() => _AddPaymentState();
+  _AddPaymentState createState() => _AddPaymentState(_event);
 }
 
 class _AddPaymentState extends State<AddPayment> {
-  String _title = '';
-  String _price = '';
-  String _memo = '';
+  _AddPaymentState(this._event);
+  final Event _event;
 
-  List<DropdownMenuItem<int>> _users = [];
+  List<DropdownMenuItem<int>> _userList = [];
   int _selectUser = 0;
-
-  List<DropdownMenuItem<int>> _events = [];
-  int _selectEvent = 0;
 
   @override
   void initState() {
     super.initState();
-    setUsers();
-    setEvents();
-    _selectUser = _users[0].value!;
-    _selectEvent = _events[0].value!;
+    getUsers();
+    _selectUser = _userList[0].value!;
   }
 
-  void setUsers() {
-    _users
+  void getUsers() {
+    _userList
       ..add(DropdownMenuItem(
         child: Text('ゆうき'),
         value: 1,
@@ -39,17 +38,37 @@ class _AddPaymentState extends State<AddPayment> {
       ));
   }
 
-  void setEvents() {
-    _events
-      ..add(DropdownMenuItem(
-        child: Text('高崎'),
-        value: 1,
-      ))
-      ..add(DropdownMenuItem(
-        child: Text('前橋'),
-        value: 2,
-      ));
+  // 支払いを追加する
+  Future storePayment(int eventId, String? title, String? price, String? memo) async {
+    var url = Uri.http(Constants.HOST, '/api/events/$eventId/payments/store');
+
+    String body = convert.jsonEncode({
+      'event_id': eventId,
+      'payer_id': _selectUser,
+      'title': title,
+      'price': price,
+      'memo': memo
+    });
+
+    var response = await http.post(url, headers: Constants.HEADERS, body: body);
+    if (response.statusCode == 200) {
+    } else if (response.statusCode == 422) {
+      final snackBar = SnackBar(
+        content: Text('エラーが発生しました'),
+        action: SnackBarAction(
+          label: 'OK',
+          onPressed: () {
+            // Some code to undo the change.
+          },
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(snackBar);
+    }
   }
+
+  String? title;
+  String? price;
+  String? memo;
 
   @override
   Widget build(BuildContext context) {
@@ -59,7 +78,7 @@ class _AddPaymentState extends State<AddPayment> {
         title: Text('支払いを追加する'),
       ),
       body: Container(
-          margin: EdgeInsets.only(top: 64),
+          margin: EdgeInsets.only(top: 30),
           padding: EdgeInsets.all(30),
           child: Column(
               children: [
@@ -67,16 +86,13 @@ class _AddPaymentState extends State<AddPayment> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
-                      DropdownButton<int>(
-                        items: _events,
-                        value: _selectEvent,
-                        onChanged: (value) => {
-                          setState(() {
-                            _selectEvent = value!;
-                          }),
-                        },
-                      ),
-                      Text('で、'),
+                      Text('イベント',
+                        style: TextStyle(
+                        fontSize: 20,
+                  ),),
+                      Text(_event.title,
+                        style: TextStyle(
+                        fontSize: 20,))
                     ],
                   ),
                 ),
@@ -84,8 +100,11 @@ class _AddPaymentState extends State<AddPayment> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
+                      Text('はらった人',
+                        style: TextStyle(
+                        fontSize: 20,)),
                       DropdownButton<int>(
-                        items: _users,
+                        items: _userList,
                         value: _selectUser,
                         onChanged: (value) => {
                           setState(() {
@@ -93,21 +112,22 @@ class _AddPaymentState extends State<AddPayment> {
                           }),
                         },
                       ),
-                      Text('が、'),
                     ],
                   ),
                 ),
                 Padding(padding: const EdgeInsets.symmetric(vertical: 16.0),
                   child: Column(
                     children: [
-                      TextFormField(
-                        initialValue: _title,
+                      TextField(
+                        style: new TextStyle(
+                          fontSize: 20.0,
+                        ),
                         decoration: InputDecoration(
                           labelText: "タイトル",
                         ),
                         onChanged: (value) => {
                           setState(() {
-                            _title = value;
+                            title = value;
                           }),
                         },
                       ),
@@ -117,14 +137,16 @@ class _AddPaymentState extends State<AddPayment> {
                 Padding(padding: const EdgeInsets.symmetric(vertical: 16.0),
                   child: Column(
                     children: [
-                      TextFormField(
-                        initialValue: _price,
+                      TextField(
+                        style: new TextStyle(
+                          fontSize: 20.0,
+                        ),
                         decoration: InputDecoration(
                           labelText: "金額",
                         ),
                         onChanged: (value) => {
                           setState(() {
-                            _price = value;
+                            price = value;
                           }),
                         },
                       ),
@@ -134,14 +156,16 @@ class _AddPaymentState extends State<AddPayment> {
                 Padding(padding: const EdgeInsets.symmetric(vertical: 16.0),
                   child: Column(
                     children: [
-                      TextFormField(
-                        initialValue: _memo,
+                      TextField(
+                        style: new TextStyle(
+                          fontSize: 20.0,
+                        ),
                         decoration: InputDecoration(
                           labelText: "メモ",
                         ),
                         onChanged: (value) => {
                           setState(() {
-                            _memo = value;
+                            memo = value;
                           }),
                         },
                       ),
@@ -154,17 +178,20 @@ class _AddPaymentState extends State<AddPayment> {
                       padding: EdgeInsets.only(top: 30),
                       width: double.infinity,
                       child: ElevatedButton(
-                          child: Text(
-                            '追加',
-                            style: TextStyle(color: Colors.white),
+                          child: Text('追加',
+                            style: TextStyle(
+                              fontSize: 20,
+                              color: Colors.white,
+                            ),
                           ),
                           style: ElevatedButton.styleFrom(
                             primary: Colors.blue,
                             onPrimary: Colors.black,
                             elevation: 16,
                           ),
-                        onPressed: () {
-                          Navigator.of(context).pop();
+                        onPressed: () async {
+                          var result = await storePayment(_event.id, title, price, memo);
+                          Navigator.of(context).pop(_event.id);
                         },
                     ),),
                 ),
